@@ -29,6 +29,13 @@ export type LaunchOutcome = { ok: true; entry: TeamEntry } | { ok: false; messag
  */
 export type PluginOutcome = { ok: true } | { ok: false; message: string; skipped?: boolean };
 
+/** What `update --check` reports about the installed plugin. Any error line makes it exit 1; a warning does not. */
+export interface PluginCheck {
+  lines: string[];
+  errors: string[];
+  warnings: string[];
+}
+
 /** What each harness adapter provides. */
 export interface Adapter {
   id: HarnessId;
@@ -43,6 +50,8 @@ export interface Adapter {
   installPlugin?(ctx: AdapterContext): Promise<PluginOutcome>;
   /** Updates the plugin through the harness. Unset: not built yet. */
   updatePlugin?(ctx: AdapterContext): Promise<PluginOutcome>;
+  /** Compares the installed plugin with the one this CLI carries, for `update --check`. It changes nothing. */
+  checkPlugin?(ctx: Pick<AdapterContext, 'env' | 'runner'>): Promise<PluginCheck>;
   /** The user settings file whose inbound setting install sets to accept, after a dated backup. */
   inboundTarget?(env: Env): InboundTarget;
   /**

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.ts';
 import { readTeam } from '../src/store/team-json.ts';
 import { SMALL_TEAM } from './helpers/roles.ts';
-import { installedOn, writeRoles, type Harnessed } from './helpers/team.ts';
+import { installedInRepo, installedOn, writeRoles, type Harnessed } from './helpers/team.ts';
 
 const TEAM = SMALL_TEAM.replace('operator: you', 'operator: you\nmailbox: ~/team-mail')
   .replace('transport: auto', 'transport: file-mailbox')
@@ -89,20 +89,22 @@ describe('respawn after the roles file changed', () => {
 
 describe('install with a roles file in the folder', () => {
   it('shows the file and confirms before it reads the mailbox from it', async () => {
-    const quiet = installedOn('codex', 'file-mailbox', { fetchLatest: async () => ({ status: 'not-published' }) });
+    // Codex exports its skills into the project, so each install runs at a git worktree top.
+    const quiet = installedInRepo('codex', 'file-mailbox', { fetchLatest: async () => ({ status: 'not-published' }) });
     writeFileSync(join(quiet.env.cwd, 'sagespec.yml'), TEAM);
     expect(await main(['install', '--harness', 'codex', '--reconfigure', '--non-interactive'], quiet.deps)).toBe(2);
     expect(quiet.out.text()).toContain(`Roles file found in this folder: ${join(quiet.env.cwd, 'sagespec.yml')}`);
     expect(quiet.err.text()).toMatch(/--yes/);
     expect(existsSync(join(quiet.env.home, 'team-mail'))).toBe(false);
     expect(existsSync(join(quiet.env.home, '.agents'))).toBe(false);
+    expect(existsSync(join(quiet.env.cwd, '.agents'))).toBe(false);
 
-    const yes = installedOn('codex', 'file-mailbox');
+    const yes = installedInRepo('codex', 'file-mailbox');
     writeFileSync(join(yes.env.cwd, 'sagespec.yml'), TEAM);
     expect(await main(['install', '--harness', 'codex', '--reconfigure', '--yes'], yes.deps)).toBe(0);
     expect(existsSync(join(yes.env.home, 'team-mail'))).toBe(true);
 
-    const asked = installedOn('codex', 'file-mailbox');
+    const asked = installedInRepo('codex', 'file-mailbox');
     writeFileSync(join(asked.env.cwd, 'sagespec.yml'), TEAM);
     const answered = withAnswer(asked, 'y');
     expect(await main(['install', '--harness', 'codex', '--reconfigure'], answered.deps)).toBe(0);

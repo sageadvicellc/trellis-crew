@@ -11,14 +11,15 @@ import { makeFixtureHome, makeTestEnv } from './helpers/env.ts';
 import { capture, type Capture } from './helpers/io.ts';
 import { fixtureBin, repoRoot } from './helpers/paths.ts';
 import { makeFixtureRepo } from './helpers/git-repo.ts';
-import { isGitCall, recordingRunner, type RecordingRunner } from './helpers/recording-runner.ts';
+import { isGitCall } from './helpers/recording-runner.ts';
+import { gitRunner, type GitRunner } from './helpers/git-runner.ts';
 import { SMALL_TEAM } from './helpers/roles.ts';
 import { writeRoles } from './helpers/team.ts';
 import type { Env } from '../src/env.ts';
 
 interface Rig {
   env: Env;
-  runner: RecordingRunner;
+  runner: GitRunner;
   out: Capture;
   err: Capture;
   ask: ReturnType<typeof vi.fn>;
@@ -28,7 +29,7 @@ interface Rig {
 
 /**
  * A fresh fixture home with no install.yml, a Claude Code folder, and a
- * recording runner that runs nothing but the git check. The current folder
+ * git runner that runs real git and nothing else. The current folder
  * is the top of a temp git repository, where Codex sessions may start.
  */
 function rig(options: { tty?: boolean } = {}): Rig {
@@ -36,7 +37,7 @@ function rig(options: { tty?: boolean } = {}): Rig {
   mkdirSync(join(env.home, '.claude'));
   const settings = join(env.home, '.claude', 'settings.json');
   writeFileSync(settings, '{"theme": "dark"}\n');
-  const runner = recordingRunner();
+  const runner = gitRunner();
   const out = capture();
   const err = capture();
   const ask = vi.fn(async () => 'y');
@@ -221,14 +222,22 @@ describe('up --harness codex', () => {
     expect(await main(['up', '--harness', 'codex'], t.deps)).toBe(0);
     expect(t.ask).not.toHaveBeenCalled();
     expect(readInstallRecord(t.env)).toMatchObject({ ok: true, record: { harness: 'codex', transport: 'file-mailbox' } });
-    expect(readdirSync(join(t.env.home, '.agents', 'skills')).sort()).toEqual(readdirSync(join(repoRoot, 'skills')).sort());
+    // The skills go into the project, never under home.
+    expect(readdirSync(join(t.env.cwd, '.agents', 'skills')).sort()).toEqual(readdirSync(join(repoRoot, 'skills')).sort());
+    expect(existsSync(join(t.env.home, '.agents'))).toBe(false);
     // No probe runs, because --harness names the harness, and no codex process runs in a test.
-    // The only runs are the working-folder checks: once before step 1, and once before the supervisor starts.
-    const check = [
-      ['rev-parse', '--show-toplevel'],
-      ['config', '--list', '--show-origin', '--includes', '-z'],
-    ];
-    expect(t.runner.calls.filter((c) => c.kind === 'run').map((c) => c.args)).toEqual([...check, ...check]);
+    // Apart from git, no command runs.
+    expect(t.runner.calls.filter((c) => c.kind === 'run')).toEqual([]);
+    // The working-folder check runs once before step 1, and once before the supervisor starts.
+    // The skill export in step 1 makes its own worktree-top check, one more `rev-parse --show-toplevel`.
+    const toplevel = ['rev-parse', '--show-toplevel'];
+    const settings = ['config', '--list', '--show-origin', '--includes', '-z'];
+    const gitArgs = t.runner.gitCalls.map((c) => c.args);
+    expect(gitArgs.filter((args) => args.join('\0') === toplevel.join('\0'))).toHaveLength(3);
+    expect(gitArgs.filter((args) => args.join('\0') === settings.join('\0'))).toHaveLength(2);
+    // The order: the working-folder check comes first, its top and then its settings,
+    // before the export's own worktree-top check.
+    expect(gitArgs.slice(0, 3)).toEqual([toplevel, settings, toplevel]);
     const job = supervisorJob(t);
     expect(job.binary).toBe(join(fixtureBin, 'codex'));
     expect(job.sessions).toHaveLength(6);
@@ -384,7 +393,7 @@ describe('up --harness codex', () => {
     const deps = { ...t.deps, env: { ...t.env, cwd: t.env.home } };
     writeRoles(deps.env, 'team.yml', SMALL_TEAM.replace('operator: you', 'operator: you\nmailbox: ~/team-mail').replace('transport: auto', 'transport: file-mailbox'));
     expect(await main(['up', '--harness', 'claude-code', '--skip-inbound', '--roles', 'team.yml'], deps)).toBe(0);
-    expect(t.runner.calls.filter(isGitCall)).toEqual([]);
+    expect(t.runner.gitCalls).toEqual([]);
     expect(existsSync(join(t.env.home, 'team-mail'))).toBe(true);
   });
 
@@ -405,6 +414,7 @@ function expectNothingInstalled(t: Rig): void {
   expect(t.runner.calls.filter((c) => !isGitCall(c))).toEqual([]);
   expect(existsSync(join(t.env.home, '.trellis-crew', 'install.yml'))).toBe(false);
   expect(existsSync(join(t.env.home, '.agents'))).toBe(false);
+  expect(existsSync(join(t.env.cwd, '.agents'))).toBe(false);
   expect(existsSync(teamJsonPath(t.env))).toBe(false);
   expect(t.out.text()).not.toContain('Step 1 of 2');
 }
@@ -413,7 +423,7 @@ function expectNothingInstalled(t: Rig): void {
 function changedDuringInstall(during: (t: Rig) => void): Rig {
   const t = rig();
   let done = false;
-  const runner = recordingRunner((_command, args) => {
+  const runner = gitRunner((_command, args) => {
     if (!done && args[0] === 'plugin' && args[1] === 'install') {
       done = true;
       during(t);
@@ -530,7 +540,7 @@ describe('up --harness claude-code', () => {
 
   it('stops at a failed plugin install with its message', async () => {
     const t = rig();
-    const failing = recordingRunner((_command, args) =>
+    const failing = gitRunner((_command, args) =>
       args[0] === 'plugin' ? { code: 1, stdout: '', stderr: 'fixture refusal\n', timedOut: false } : { code: 0, stdout: '', stderr: '', timedOut: false },
     );
     expect(await main(['up', '--harness', 'claude-code', '--skip-inbound'], { ...t.deps, runner: failing })).toBe(1);

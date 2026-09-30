@@ -10,7 +10,8 @@ import { writeTeam } from '../src/store/team-json.ts';
 import { makeTestEnv } from './helpers/env.ts';
 import { capture } from './helpers/io.ts';
 import { repoRoot } from './helpers/paths.ts';
-import { recordingRunner } from './helpers/recording-runner.ts';
+import { makeFixtureRepo } from './helpers/git-repo.ts';
+import { gitRunner } from './helpers/git-runner.ts';
 
 describe('file mailbox in the README', () => {
   it('names the file mailbox as the tier-three path, and no MCP mailbox, as this build carries none', () => {
@@ -193,10 +194,11 @@ describe('file mailbox folder', () => {
     expect(() => writeTeam(env, { version: 1, harness: 'codex', sessions: [] })).toThrow(/symlink/);
     expect(readdirSync(elsewhere)).toEqual([]);
 
+    // Codex exports its skills into the project first, so the install runs at a git worktree top.
     const err = capture();
     const code = await main(['install', '--harness', 'codex', '--non-interactive'], {
-      env,
-      runner: recordingRunner(),
+      env: { ...env, cwd: makeFixtureRepo().root },
+      runner: gitRunner(),
       out: () => {},
       err: err.write,
     });

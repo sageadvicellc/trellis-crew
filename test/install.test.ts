@@ -10,6 +10,7 @@ import { capture } from './helpers/io.ts';
 import { recordingRunner, type RecordingRunner } from './helpers/recording-runner.ts';
 import { fixtureBin } from './helpers/paths.ts';
 import type { Env } from '../src/env.ts';
+import { installedInRepo } from './helpers/team.ts';
 
 interface Rig {
   env: Env;
@@ -62,8 +63,9 @@ describe('install', () => {
   });
 
   it('34: a file-mailbox install creates the mailbox folder', async () => {
-    const t = rig();
-    await main(['install', '--harness', 'codex'], t.deps);
+    // Codex exports its skills into the project, so the install runs at a git worktree top.
+    const t = installedInRepo('codex', 'file-mailbox');
+    expect(await main(['install', '--harness', 'codex'], t.deps)).toBe(0);
     const folder = join(t.env.home, '.trellis-crew', 'mailbox');
     expect(statSync(folder).isDirectory()).toBe(true);
     expect(t.out.text()).toContain(folder);

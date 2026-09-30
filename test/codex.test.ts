@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { codexAdapter } from '../src/adapters/codex.ts';
 import { codexExecArgs, codexSandboxArgs, execArgsProblem, refusedCodexFlag } from '../src/adapters/codex-args.ts';
+import { treeHash } from '../src/adapters/codex-skills.ts';
 import { runSupervisor, type SupervisorJob } from '../src/adapters/codex-supervisor.ts';
 import { main } from '../src/cli.ts';
 import { processStartTime } from '../src/runner.ts';
@@ -12,7 +13,7 @@ import { makeFixtureRepo } from './helpers/git-repo.ts';
 import { isGitCall } from './helpers/recording-runner.ts';
 import { fixtureBin, repoRoot } from './helpers/paths.ts';
 import { SMALL_TEAM } from './helpers/roles.ts';
-import { installedOn, writeRoles } from './helpers/team.ts';
+import { installedInRepo, installedOn, writeRoles } from './helpers/team.ts';
 
 function alive(pid: number): boolean {
   try {
@@ -349,21 +350,29 @@ describe('Codex CLI', () => {
     expect(team.ok && team.record?.sessions[0]?.pid).toBeNull();
   });
 
-  it('install copies each skill folder into ~/.agents/skills, and update copies them fresh', async () => {
-    const t = installedOn('codex', 'file-mailbox', { fetchLatest: async () => ({ status: 'not-published' }) });
+  it('install copies each approved skill folder into the project .agents/skills with its marker, and update copies them fresh', async () => {
+    const t = installedInRepo('codex', 'file-mailbox', { fetchLatest: async () => ({ status: 'not-published' }) });
     mkdirSync(join(t.env.home, '.codex'));
     expect(await main(['install', '--harness', 'codex'], t.deps)).toBe(0);
-    const skills = readdirSync(join(repoRoot, 'skills'));
-    const target = join(t.env.home, '.agents', 'skills');
-    expect(readdirSync(target).sort()).toEqual(skills.sort());
+    const manifest = JSON.parse(readFileSync(join(repoRoot, '.claude-plugin', 'plugin.json'), 'utf8')) as { skills: string[] };
+    const skills = manifest.skills.map((entry) => entry.replace(/^\.\/skills\/|\/$/g, ''));
+    const target = join(t.repo.root, '.agents', 'skills');
+    expect(existsSync(join(t.env.home, '.agents'))).toBe(false);
+    expect(readdirSync(target).sort()).toEqual([...skills].sort());
     for (const skill of skills) {
       expect(readFileSync(join(target, skill, 'SKILL.md'), 'utf8')).toBe(readFileSync(join(repoRoot, 'skills', skill, 'SKILL.md'), 'utf8'));
+      expect(JSON.parse(readFileSync(join(target, skill, '.trellis-crew-skill.json'), 'utf8'))).toMatchObject({ owner: 'trellis-crew', skill });
     }
+    // A copy from an older package: an extra file, and a marker whose hash covers it.
     writeFileSync(join(target, 'department-lead', 'stale.txt'), 'old');
+    const lead = join(target, 'department-lead');
+    writeFileSync(join(lead, '.trellis-crew-skill.json'), JSON.stringify({ owner: 'trellis-crew', skill: 'department-lead', sha256: treeHash(lead) }));
     writeFileSync(join(target, 'someone-elses-skill.md'), 'keep');
+    mkdirSync(join(target, 'someone-elses-folder'));
     expect(await main(['update'], t.deps)).toBe(0);
     expect(existsSync(join(target, 'department-lead', 'stale.txt'))).toBe(false);
     expect(existsSync(join(target, 'someone-elses-skill.md'))).toBe(true);
+    expect(existsSync(join(target, 'someone-elses-folder'))).toBe(true);
     expect(t.runner.calls).toEqual([]);
   });
 });

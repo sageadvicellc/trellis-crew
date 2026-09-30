@@ -1,4 +1,3 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stateDir } from '../env.ts';
@@ -6,6 +5,7 @@ import { writeFileAtomic } from '../fs-atomic.ts';
 import { ensurePrivateFolder } from '../fs-private.ts';
 import { CODEX_FLAGS, codexExecArgs } from './codex-args.ts';
 import { checkWorkdir, codexChildEnv, codexMailboxProblem } from './codex-guard.ts';
+import { exportSkills, skillCheckReport } from './codex-skills.ts';
 import type { SupervisorJob } from './codex-supervisor.ts';
 import type { Adapter, AdapterContext, PluginOutcome } from './types.ts';
 
@@ -14,11 +14,6 @@ export { CODEX_FLAGS, codexExecArgs, codexSandboxArgs, execArgsProblem, refusedC
 /** The skill folders this package carries, one per skill. */
 export function packageSkillsDir(): string {
   return fileURLToPath(new URL('../../skills/', import.meta.url));
-}
-
-/** The folder Codex CLI reads user skills from. */
-export function codexSkillsDir(home: string): string {
-  return join(home, '.agents', 'skills');
 }
 
 /** The supervisor script beside this file: `.ts` when run from source, `.js` when built. */
@@ -38,28 +33,9 @@ async function placeProblem(ctx: AdapterContext): Promise<string | undefined> {
   return ctx.mailbox === undefined ? undefined : codexMailboxProblem(ctx.mailbox, ctx.env);
 }
 
-/**
- * Copies each skill folder into `~/.agents/skills/<skill>/`. It first
- * removes only the folders this package owns, so a stale file goes and
- * every other skill stays.
- */
-function copySkills(ctx: AdapterContext): PluginOutcome {
-  const source = packageSkillsDir();
-  if (!existsSync(source)) return { ok: false, message: `the skill folders are missing from this package: ${source}` };
-  const target = codexSkillsDir(ctx.env.home);
-  try {
-    mkdirSync(target, { recursive: true });
-    for (const skill of readdirSync(source, { withFileTypes: true })) {
-      if (!skill.isDirectory()) continue;
-      const dest = join(target, skill.name);
-      rmSync(dest, { recursive: true, force: true });
-      cpSync(join(source, skill.name), dest, { recursive: true });
-    }
-  } catch (error) {
-    return { ok: false, message: errorMessage(error) };
-  }
-  ctx.out(`Copied the trellis-crew skills into ${target}.`);
-  return { ok: true };
+/** Exports each approved skill into `.agents/skills/<skill>/` at the project's worktree top, never under home. See codex-skills.ts. */
+function copySkills(ctx: AdapterContext): Promise<PluginOutcome> {
+  return exportSkills(ctx);
 }
 
 /**
@@ -133,5 +109,9 @@ export const codexAdapter: Adapter = {
   async updatePlugin(ctx) {
     // The documented update is a fresh copy of the skill folders.
     return copySkills(ctx);
+  },
+
+  checkPlugin(ctx) {
+    return skillCheckReport(ctx);
   },
 };

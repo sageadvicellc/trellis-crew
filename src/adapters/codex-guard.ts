@@ -21,8 +21,12 @@ const GIT_TIMEOUT_MS = 10_000;
 const GIT_TOP = ['rev-parse', '--show-toplevel'];
 const GIT_CONFIG = ['config', '--list', '--show-origin', '--includes', '-z'];
 
-/** The environment for every git call the check makes: every GIT_ variable is removed, so git sees what plain git sees. */
-function withoutGitVars(vars: Readonly<Record<string, string | undefined>>): Record<string, string> {
+/**
+ * The environment for every git call the check makes: every GIT_ variable
+ * is removed, so git sees what plain git sees. The skill export in
+ * codex-skills.ts uses it too.
+ */
+export function withoutGitVars(vars: Readonly<Record<string, string | undefined>>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(vars)) {
     if (value !== undefined && !key.startsWith('GIT_')) out[key] = value;

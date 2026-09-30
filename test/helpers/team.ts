@@ -5,7 +5,8 @@ import type { CliDeps } from '../../src/cli.ts';
 import type { Env } from '../../src/env.ts';
 import { writeInstallRecord } from '../../src/store/install-yml.ts';
 import { makeTestEnv } from './env.ts';
-import { makeFixtureRepo } from './git-repo.ts';
+import { makeFixtureRepo, type FixtureRepo } from './git-repo.ts';
+import { gitRunner, type GitRunner } from './git-runner.ts';
 import { capture, type Capture } from './io.ts';
 import { recordingRunner, type RecordingRunner } from './recording-runner.ts';
 
@@ -38,6 +39,30 @@ export function installedOn(
   const out = capture();
   const err = capture();
   return { env, runner, out, err, deps: { env, runner, out: out.write, err: err.write, ...extra } };
+}
+
+export interface HarnessedRepo extends Omit<Harnessed, 'runner'> {
+  runner: GitRunner;
+  repo: FixtureRepo;
+}
+
+/**
+ * Like installedOn, but the Env's current folder is the top of a fresh git
+ * repository apart from the home, and the runner runs git for real. The
+ * Codex skill export needs both.
+ */
+export function installedInRepo(
+  harness: Adapter['id'],
+  transport: 'native' | 'a2a' | 'file-mailbox',
+  extra: Partial<CliDeps> = {},
+): HarnessedRepo {
+  const repo = makeFixtureRepo();
+  const env = makeTestEnv({ cwd: repo.root });
+  writeInstallRecord(env, { harness, transport, plugin_version: '0.1.0' });
+  const runner = gitRunner();
+  const out = capture();
+  const err = capture();
+  return { env, runner, repo, out, err, deps: { env, runner, out: out.write, err: err.write, ...extra } };
 }
 
 /** Writes a roles file into the Env's current folder and returns its path. */
