@@ -21,6 +21,8 @@ export const CLAUDE_LAUNCH_TIMEOUT_MS = 120_000;
 export const CLAUDE_PLUGIN_TIMEOUT_MS = 300_000;
 
 async function pluginCommand(ctx: AdapterContext, args: readonly string[]): Promise<PluginOutcome> {
+  // env.vars goes to the user's own claude by design, so the user's own
+  // sign-in applies. Trellis never reads, stores, or changes it.
   const result = await ctx.runner.run(ctx.binaryPath, ['plugin', ...args], {
     env: ctx.env.vars,
     cwd: ctx.env.cwd,

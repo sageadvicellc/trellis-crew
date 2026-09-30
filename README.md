@@ -33,6 +33,10 @@ npm run build
 npm link
 ```
 
+### Sign-in
+
+Sign in to your harness before you run Trellis. Trellis runs your installed Claude Code under your own sign-in. It does not offer, handle, or broker a claude.ai login.
+
 ### Set it up once
 
 Run `trellis-crew install`. The CLI looks for each harness it knows and
