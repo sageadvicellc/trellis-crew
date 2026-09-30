@@ -14,6 +14,9 @@ import { fixtureBin, repoRoot } from './helpers/paths.ts';
 import { SMALL_TEAM } from './helpers/roles.ts';
 import { installedOn, writeRoles } from './helpers/team.ts';
 
+/** The supervisor reads the experimental Codex flag from its options here, so these tests set it themselves. */
+const FLAG_ON = { TRELLIS_EXPERIMENTAL_CODEX: '1' };
+
 function alive(pid: number): boolean {
   try {
     return process.kill(pid, 0);
@@ -277,7 +280,7 @@ describe('Codex CLI', () => {
         { name: 'worker-1', args: codexExecArgs([], 'kickoff two', dir) },
       ],
     };
-    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: () => {} });
+    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: () => {}, vars: FLAG_ON });
     await waitFor(() => {
       const team = readTeamFile(teamPath);
       return team.ok && !!team.record && team.record.sessions.every((s) => s.pid !== null);
@@ -320,7 +323,7 @@ describe('Codex CLI', () => {
       ],
     };
     const warnings: string[] = [];
-    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line) });
+    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line), vars: FLAG_ON });
     await waitFor(() => {
       const team = readTeamFile(teamPath);
       return team.ok && team.record?.sessions.find((s) => s.name === 'good')?.pid !== null;
@@ -342,7 +345,7 @@ describe('Codex CLI', () => {
     writeTeamFile(teamPath, { version: 1, harness: 'codex', sessions: [{ name: 'main', pid: null, session_id: null }] });
     const handle = runSupervisor(
       { binary: join(dir, 'missing'), cwd: makeFixtureRepo().root, home: dir, teamPath, sessions: [{ name: 'main', args: ['exec', 'k'] }] },
-      { ownPid: process.pid, pollMs: 10, waitMs: 100 },
+      { ownPid: process.pid, pollMs: 10, waitMs: 100, vars: FLAG_ON },
     );
     await handle.done;
     const team = readTeamFile(teamPath);

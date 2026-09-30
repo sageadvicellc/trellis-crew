@@ -11,6 +11,8 @@ export interface RecordedCall {
   kind: 'run' | 'detached' | 'kill';
   command: string;
   args: readonly string[];
+  /** The environment a detached spawn was given. */
+  env?: RunOptions['env'];
 }
 
 export type Responder = (command: string, args: readonly string[]) => RunResult | Promise<RunResult>;
@@ -72,8 +74,8 @@ export function recordingRunner(responder: Responder = () => ok): RecordingRunne
       if (basename(command) === 'git') return realGit(args, options);
       return responder(command, args);
     },
-    async spawnDetached(command: string, args: readonly string[]): Promise<{ pid: number }> {
-      calls.push({ kind: 'detached', command, args });
+    async spawnDetached(command: string, args: readonly string[], options?: RunOptions): Promise<{ pid: number }> {
+      calls.push({ kind: 'detached', command, args, ...(options?.env === undefined ? {} : { env: options.env }) });
       nextPid += 1;
       living.add(nextPid);
       starts.set(nextPid, `fixture-start-${nextPid}`);

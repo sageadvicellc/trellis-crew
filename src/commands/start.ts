@@ -4,6 +4,7 @@ import { adapterFor } from '../adapters/index.ts';
 import type { Adapter, AdapterContext, LaunchItem, LaunchValues } from '../adapters/types.ts';
 import { EXIT_OK, EXIT_RUNTIME, EXIT_USAGE, type CliDeps } from '../deps.ts';
 import { terminalAsk } from '../detect/confirm.ts';
+import { codexExperimentalProblem } from '../experimental.ts';
 import { printable } from '../printable.ts';
 import { findBinary, HARNESSES } from '../detect/probe.ts';
 import { composeKickoff } from '../kickoff/compose.ts';
@@ -53,6 +54,16 @@ export function harnessMismatch(loaded: Extract<LoadResult, { ok: true }>, harne
  * folder, and launches every session. `start` and `up` both run it.
  */
 export async function runStart(options: StartOptions, deps: CliDeps): Promise<number> {
+  // With Codex recorded and the flag off, stop before a roles file is listed or a question asked.
+  // planLaunch keeps the same check as the backstop for a roles file that names Codex.
+  const installed = readInstallRecord(deps.env);
+  if (installed.ok && installed.record?.harness === 'codex') {
+    const experimental = codexExperimentalProblem(deps.env.vars);
+    if (experimental !== undefined) {
+      deps.err(experimental);
+      return EXIT_USAGE;
+    }
+  }
   const loaded = loadForHarness(
     {
       env: deps.env,
@@ -170,6 +181,14 @@ export function planLaunch(config: RolesConfig, deps: CliDeps): { ok: true; plan
   if (harness === undefined) {
     deps.err('No harness is chosen yet. Run trellis-crew install first.');
     return { ok: false, code: EXIT_RUNTIME };
+  }
+  // Codex is behind an experimental flag in this version. start and respawn both plan here, before anything is stopped or started.
+  if (harness === 'codex') {
+    const experimental = codexExperimentalProblem(deps.env.vars);
+    if (experimental !== undefined) {
+      deps.err(experimental);
+      return { ok: false, code: EXIT_USAGE };
+    }
   }
   const info = HARNESSES.find((h) => h.id === harness);
   const adapter = adapterFor(harness, deps.adapters);

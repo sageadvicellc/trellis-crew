@@ -3,6 +3,7 @@ import { isAbsolute, resolve } from 'node:path';
 import { checkWorkdir } from '../adapters/codex-guard.ts';
 import { adapterFor } from '../adapters/index.ts';
 import type { Command, UpHarness } from '../args.ts';
+import { codexExperimentalProblem } from '../experimental.ts';
 import { mailboxPath } from '../mailbox/folder.ts';
 import { EXIT_OK, EXIT_USAGE, type CliDeps } from '../deps.ts';
 import { HARNESSES } from '../detect/probe.ts';
@@ -140,8 +141,14 @@ function displayName(harness: UpHarness): string {
  * fails, names that step, and exits with that step's code.
  */
 export async function runUp(options: UpOptions, deps: CliDeps): Promise<number> {
-  // Codex sessions can write their working folder, so it is checked before anything else.
   if (options.harness === 'codex') {
+    // Codex is behind an experimental flag in this version. Nothing runs or is written before this.
+    const experimental = codexExperimentalProblem(deps.env.vars);
+    if (experimental !== undefined) {
+      deps.err(experimental);
+      return stopped(deps, STEP_INSTALL, EXIT_USAGE, NOTHING_YET);
+    }
+    // Codex sessions can write their working folder, so it is checked before anything else.
     const workdir = await checkWorkdir(deps.env, deps.runner);
     if (workdir !== undefined) {
       deps.err(workdir);

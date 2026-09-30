@@ -97,6 +97,8 @@ export interface ProbeOptions {
   timeoutMs?: number;
   /** Prints one line about a probe that failed in a way it did not expect. */
   warn?: (line: string) => void;
+  /** Harnesses to leave out entirely: no binary look-up, no version command, no folder check. */
+  skip?: readonly HarnessId[];
 }
 
 export const DEFAULT_PROBE_TIMEOUT_MS = 5000;
@@ -170,6 +172,7 @@ export function sortCandidates(candidates: readonly Candidate[]): Candidate[] {
 export async function probeHarnesses(env: Env, runner: Runner, options: ProbeOptions = {}): Promise<Candidate[]> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
   const warn = options.warn ?? (() => {});
-  const results = await Promise.all(HARNESSES.map((h) => probeOne(h, env, runner, timeoutMs, warn)));
+  const skip = options.skip ?? [];
+  const results = await Promise.all(HARNESSES.filter((h) => !skip.includes(h.id)).map((h) => probeOne(h, env, runner, timeoutMs, warn)));
   return sortCandidates(results.filter((c) => c.hits > 0));
 }

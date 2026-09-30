@@ -1,5 +1,6 @@
 import type { LaunchValues } from '../adapters/types.ts';
 import { EXIT_OK, EXIT_RUNTIME, EXIT_USAGE, type CliDeps } from '../deps.ts';
+import { codexExperimentalProblem } from '../experimental.ts';
 import {
   CLAUDE_AUTOCOMPACT_MAX,
   CLAUDE_AUTOCOMPACT_MIN,
@@ -71,6 +72,15 @@ export async function runRespawn(options: RespawnOptions, deps: CliDeps): Promis
     return EXIT_RUNTIME;
   }
   const record = team.record;
+  // A team recorded on Codex is refused first, before any roles file is read or any question asked.
+  // planLaunch keeps the same check as the backstop.
+  if (record.harness === 'codex') {
+    const experimental = codexExperimentalProblem(deps.env.vars);
+    if (experimental !== undefined) {
+      deps.err(experimental);
+      return EXIT_USAGE;
+    }
+  }
   const index = record.sessions.findIndex((s) => s.name === options.session);
   const entry = record.sessions[index];
   if (entry === undefined) {

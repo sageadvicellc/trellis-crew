@@ -103,7 +103,10 @@ your harness's own update command, and it never runs that command.
 ### Set up and start in one step
 
 `trellis-crew up` runs the install and then `start`, in one command.
-It works on Codex CLI and Claude Code.
+It works on Codex CLI and Claude Code. Codex CLI is experimental in
+v0.7: set `TRELLIS_EXPERIMENTAL_CODEX=1` to turn it on. Full support
+arrives in v1. `stop` and `status` never need the flag, so you can
+always clean up a Codex team.
 
 ```
 trellis-crew up --harness codex

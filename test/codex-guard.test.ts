@@ -18,7 +18,10 @@ import { isGitCall, recordingRunner } from './helpers/recording-runner.ts';
 import { SMALL_TEAM } from './helpers/roles.ts';
 import { installedOn, writeRoles } from './helpers/team.ts';
 
-const RULE = 'Codex CLI sessions can write their working folder, so trellis-crew starts them only at the top of a git worktree.';
+/** The supervisor reads the experimental Codex flag from its options here, so these tests set it themselves. */
+const FLAG_ON = { TRELLIS_EXPERIMENTAL_CODEX: '1' };
+
+const RULE ='Codex CLI sessions can write their working folder, so trellis-crew starts them only at the top of a git worktree.';
 
 /** The five working folders every place must judge: four refused and one that passes. */
 function folders(): { home: string; cases: { name: string; cwd: string; reason: RegExp | null }[] } {
@@ -148,7 +151,7 @@ describe('the Codex working folder: the supervisor refuses before it starts any 
       const { home } = folders();
       const { job, teamPath } = supervisorRig(cwd, name === 'the home folder' ? cwd : home);
       const warnings: string[] = [];
-      const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line) });
+      const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line), vars: FLAG_ON });
       if (reason === null) {
         await waitFor(() => {
           const team = readTeamFile(teamPath);
@@ -172,7 +175,7 @@ describe('the Codex working folder: the supervisor refuses before it starts any 
     const home = makeFixtureHome();
     const { job, teamPath } = supervisorRig(home, home);
     // The default report also writes the line to standard error, so this test prints it once.
-    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10 });
+    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, vars: FLAG_ON });
     await handle.done;
     expect(readFileSync(join(dirname(teamPath), 'codex-supervisor.log'), 'utf8')).toMatch(/refused to start any session: .*it is your home folder\./);
   });
@@ -263,7 +266,7 @@ describe('the Codex working folder holds no other git repository, at depth 1 to 
 
     const { job, teamPath } = supervisorRig(t.env.cwd, t.env.home);
     const warnings: string[] = [];
-    await runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line) }).done;
+    await runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line), vars: FLAG_ON }).done;
     expect(warnings).toEqual([expect.stringMatching(reason)]);
     expect(readTeamFile(teamPath)).toMatchObject({ ok: true, record: { sessions: [{ pid: null }] } });
   });
@@ -352,7 +355,7 @@ describe('the Codex working folder does not hold its own git hooks folder', () =
 
     const { job } = supervisorRig(t.env.cwd, t.env.home);
     const warnings: string[] = [];
-    await runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line) }).done;
+    await runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: (line) => warnings.push(line), vars: FLAG_ON }).done;
     expect(warnings).toEqual([expect.stringMatching(inside)]);
   });
 });
@@ -770,7 +773,7 @@ describe('the Codex child environment is an allowlist', () => {
     const { job, teamPath } = supervisorRig(repo.root, makeFixtureHome());
     const out = join(dirname(teamPath), 'child-env.txt');
     writeFileSync(job.binary, `#!/bin/sh\n/usr/bin/env > '${out}'\nexec /bin/sleep 30\n`);
-    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: () => {} });
+    const handle = runSupervisor(job, { ownPid: process.pid, pollMs: 10, warn: () => {}, vars: FLAG_ON });
     await waitFor(() => existsSync(out) && readFileSync(out, 'utf8').includes('LANG='));
     const lines = readFileSync(out, 'utf8').split('\n');
     expect(lines).toContain('OPENAI_API_KEY=fixture-key');

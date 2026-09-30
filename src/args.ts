@@ -46,6 +46,7 @@ export const USAGE = `Usage:
   trellis-crew update [--check]
   trellis-crew start [--workers N] [--roles sagespec.yml] [--yes]
   trellis-crew up --harness <codex|claude-code> [--workers N] [--roles sagespec.yml] [--yes] [--accept-inbound | --skip-inbound]
+    (Codex is experimental in v0.7. Set TRELLIS_EXPERIMENTAL_CODEX=1 to use it.)
   trellis-crew status
   trellis-crew stop [--force-stop]
   trellis-crew respawn <name> [--model M] [--effort E] [--autocompact N] [--yes] [--force-stop]
